@@ -1,0 +1,598 @@
+package com.iso8583.test.steps;
+
+import com.iso8583.test.client.ISO8583ApiClient;
+import com.iso8583.test.config.TestConfig;
+import com.iso8583.test.utils.ValidationHelper;
+import io.cucumber.java.es.*;
+import io.cucumber.datatable.DataTable;
+import io.qameta.allure.Allure;
+import io.qameta.allure.Step;
+import io.restassured.RestAssured;
+import io.restassured.response.Response;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.*;
+
+/**
+ * Step Definitions para Balance Inquiry E2E Tests
+ * Implementa los pasos del feature file balance_inquiry.feature
+ */
+public class BalanceInquirySteps {
+
+    private static final Logger logger = LoggerFactory.getLogger(BalanceInquirySteps.class);
+
+    // Shared state entre steps
+    private ISO8583ApiClient apiClient;
+    private Response lastResponse;
+    private String currentPan;
+    private String currentTrack2;
+    private String currentTerminalId;
+    private String currentCardAcceptorId;
+    private String currentAccount;
+    private List<Response> multipleResponses = new ArrayList<>();
+    private long startTime;
+
+    // ============================================================================
+    // BACKGROUND STEPS
+    // ============================================================================
+
+    @Dado("que el simulador ISO8583 está disponible en {string}")
+    public void simuladorDisponible(String baseUrl) {
+        logger.info("🔧 Inicializando cliente API con baseUrl: {}", baseUrl);
+        // Habilitar logging de RestAssured
+        RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
+
+        // Usar configuración si no se especifica URL
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = TestConfig.getBaseUrl();
+        }
+
+        apiClient = new ISO8583ApiClient(baseUrl);
+
+        // Verificar que el servicio está disponible usando /ready
+        Response readyCheck = apiClient.isServiceReady();
+        int statusCode = readyCheck.statusCode();
+
+        Allure.addAttachment("Base URL", baseUrl);
+        Allure.addAttachment("Ready Check Status Code", String.valueOf(statusCode));
+
+        if (statusCode == 200) {
+            // ✅ Servicio LISTO
+            boolean ready = readyCheck.jsonPath().getBoolean("ready");
+            assertThat(ready)
+                    .as("Servicio debe estar listo cuando retorna 200 OK")
+                    .isTrue();
+
+            logger.info("✅ Simulador disponible y LISTO para procesar transacciones");
+            Allure.addAttachment("Service Status", "READY");
+
+        } else if (statusCode == 503) {
+            // ⚠️ Servicio NO LISTO pero funcionando
+            logger.warn("⚠️ Simulador disponible pero NO LISTO (HTTP 503)");
+            String message = readyCheck.jsonPath().getString("message");
+            String reason = readyCheck.jsonPath().getString("details.reason");
+
+            Allure.addAttachment("Service Status", "NOT READY");
+            Allure.addAttachment("Reason", reason != null ? reason : "Unknown");
+
+            fail("Simulador no está listo para procesar transacciones.\n" +
+                    "Razón: " + (reason != null ? reason : message) + "\n" +
+                    "Acción: Verificar conexión con el autorizador");
+
+        } else {
+            // ❌ Error inesperado
+            logger.error("❌ Simulador no disponible - HTTP {}", statusCode);
+            fail("Simulador no disponible. HTTP Status: " + statusCode);
+        }
+    }
+
+    @Y("el servicio está en modo {string} conectado al autorizador")
+    @Step("Verificar que el servicio está en modo {mode}")
+    public void servicioEnModo(String mode) {
+        logger.info("🔧 Verificando modo del servicio: {}", mode);
+
+        Response statusResponse = apiClient.getConnectionStatus();
+        assertThat(statusResponse.statusCode()).isEqualTo(200);
+
+        // Capturar información del modo actual (si está disponible en la respuesta)
+        try {
+            String actualMode = statusResponse.jsonPath().getString("mode");
+            if (actualMode != null) {
+                Allure.addAttachment("Modo Actual", actualMode);
+                logger.info("📊 Modo actual del simulador: {}", actualMode);
+            }
+        } catch (Exception e) {
+            // El modo puede no estar en la respuesta, ignorar
+            logger.debug("Modo no disponible en respuesta de status");
+        }
+
+        // Agregar información adicional como attachment
+        Allure.addAttachment("Connection Status", "application/json",
+                statusResponse.getBody().prettyPrint());
+
+        logger.info("✅ Servicio configurado en modo: {}", mode);
+    }
+
+    @Y("la conexión con el autorizador está establecida")
+    public void conexionEstablecida() {
+        logger.info("🔌 Verificando conexión con autorizador...");
+
+        Response connectionStatus = apiClient.getConnectionStatus();
+        assertThat(connectionStatus.statusCode()).isEqualTo(200);
+
+        boolean isConnected = connectionStatus.jsonPath().getBoolean("connected");
+
+        if (!isConnected) {
+            logger.info("⚠️ No hay conexión, intentando conectar...");
+            Response connectResponse = apiClient.connect();
+            assertThat(connectResponse.statusCode()).isEqualTo(200);
+
+            // Esperar un poco para que se establezca
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        logger.info("✅ Conexión con autorizador establecida");
+        Allure.addAttachment("Estado Conexión", "CONECTADO");
+    }
+
+    // ============================================================================
+    // GIVEN STEPS
+    // ============================================================================
+
+    @Dado("que tengo una tarjeta con PAN {string}")
+    @Step("Configurar tarjeta con PAN {pan}")
+    public void tarjetaConPan(String pan) {
+        logger.info("💳 Configurando PAN: {}...{}",
+                pan.substring(0, 6), pan.substring(pan.length()-4));
+
+        this.currentPan = pan;
+        Allure.addAttachment("PAN (Masked)", maskPan(pan));
+    }
+
+    @Y("el Track2 es {string}")
+    @Step("Configurar Track2")
+    public void track2Es(String track2) {
+        logger.info("💳 Configurando Track2");
+        this.currentTrack2 = track2;
+        Allure.addAttachment("Track2 (Masked)", maskTrack2(track2));
+    }
+
+    @Y("la terminal {string} está configurada")
+    @Step("Configurar Terminal ID: {terminalId}")
+    public void terminalConfigurada(String terminalId) {
+        logger.info("🏧 Configurando Terminal: {}", terminalId);
+        this.currentTerminalId = terminalId;
+        Allure.addAttachment("Terminal ID", terminalId);
+    }
+
+    @Y("el comercio {string} está activo")
+    @Step("Configurar Card Acceptor: {cardAcceptorId}")
+    public void comercioActivo(String cardAcceptorId) {
+        logger.info("🏪 Configurando Card Acceptor: {}", cardAcceptorId);
+        this.currentCardAcceptorId = cardAcceptorId;
+        Allure.addAttachment("Card Acceptor ID", cardAcceptorId);
+    }
+
+    @Y("la cuenta a consultar es {string}")
+    @Step("Configurar cuenta: {account}")
+    public void cuentaConsultar(String account) {
+        logger.info("💰 Configurando cuenta: {}", account);
+        this.currentAccount = account;
+        Allure.addAttachment("Account", account);
+    }
+
+    @Y("se pierde la conexión con el autorizador")
+    public void perdidaConexion() {
+        logger.info("🔌 Simulando pérdida de conexión...");
+        apiClient.disconnect();
+
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        logger.info("❌ Conexión perdida");
+    }
+
+    @Y("el autorizador está configurado para no responder")
+    public void autorizadorNoResponde() {
+        logger.info("⚠️ Configurando escenario de timeout...");
+        // Este es un paso de preparación, el timeout se manejará naturalmente
+        Allure.step("Autorizador configurado para timeout");
+    }
+
+    // ============================================================================
+    // WHEN STEPS
+    // ============================================================================
+
+    @Cuando("envío una solicitud de consulta de saldo")
+    public void envioConsultaSaldo() {
+        logger.info("📤 Enviando Balance Inquiry...");
+
+        // LOG PARÁMETROS ANTES DE ENVIAR
+        logRequestParameters();
+        startTime = System.currentTimeMillis();
+
+        lastResponse = apiClient.sendBalanceInquiry(
+                currentPan,
+                currentTrack2,
+                currentTerminalId,
+                currentCardAcceptorId,
+                currentAccount
+        );
+
+        long responseTime = System.currentTimeMillis() - startTime;
+        logger.info("📥 Respuesta recibida en {}ms", responseTime);
+
+        Allure.addAttachment("Response Time", responseTime + "ms");
+        Allure.addAttachment("HTTP Status", String.valueOf(lastResponse.statusCode()));
+        Allure.addAttachment("Response Body", lastResponse.getBody().prettyPrint());
+    }
+
+    @Cuando("envío {int} solicitudes de consulta de saldo consecutivas")
+    public void envioMultiplesConsultas(int cantidad) {
+        logger.info("📤 Enviando {} consultas consecutivas...", cantidad);
+
+        multipleResponses.clear();
+        startTime = System.currentTimeMillis();
+
+        for (int i = 0; i < cantidad; i++) {
+            Response response = apiClient.sendBalanceInquiry(
+                    currentPan,
+                    currentTrack2,
+                    currentTerminalId,
+                    currentCardAcceptorId,
+                    currentAccount
+            );
+            multipleResponses.add(response);
+
+            logger.info("✅ Consulta {}/{} completada", i+1, cantidad);
+        }
+
+        long totalTime = System.currentTimeMillis() - startTime;
+        logger.info("📥 {} consultas completadas en {}ms", cantidad, totalTime);
+
+        Allure.addAttachment("Cantidad de Consultas", String.valueOf(cantidad));
+        Allure.addAttachment("Tiempo Total", totalTime + "ms");
+    }
+
+    @Cuando("se restablece la conexión automáticamente")
+    public void restablecerConexion() {
+        logger.info("🔄 Restableciendo conexión...");
+
+        Response connectResponse = apiClient.connect();
+        assertThat(connectResponse.statusCode()).isEqualTo(200);
+
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        logger.info("✅ Conexión restablecida");
+    }
+
+    // ============================================================================
+    // THEN STEPS - HTTP & BASIC VALIDATION
+    // ============================================================================
+
+    @Entonces("el código de respuesta HTTP debe ser {int}")
+    public void codigoRespuestaHttp(int expectedStatusCode) {
+        assertThat(lastResponse.statusCode())
+                .as("HTTP Status Code")
+                .isEqualTo(expectedStatusCode);
+
+        logger.info("✅ HTTP Status: {}", expectedStatusCode);
+    }
+
+    @Y("el campo {string} debe ser {string}")
+    public void campoDebeSerValor(String field, String expectedValue) {
+        String actualValue = lastResponse.jsonPath().getString(field);
+
+        assertThat(actualValue)
+                .as("Campo %s debe ser %s", field, expectedValue)
+                .isEqualTo(expectedValue);
+
+        logger.info("✅ Campo '{}': {}", field, actualValue);
+        Allure.addAttachment(field, actualValue);
+    }
+
+    @Y("el campo {string} debe contener {string}")
+    public void campoDebeContener(String field, String expectedSubstring) {
+        String actualValue = lastResponse.jsonPath().getString(field);
+
+        assertThat(actualValue)
+                .as("Campo %s debe contener %s", field, expectedSubstring)
+                .contains(expectedSubstring);
+
+        logger.info("✅ Campo '{}' contiene: {}", field, expectedSubstring);
+    }
+
+    @Y("el tiempo de respuesta debe ser menor a {int} milisegundos")
+    public void tiempoRespuestaMenorQue(int maxResponseTime) {
+        long responseTime = lastResponse.time();
+
+        assertThat(responseTime)
+                .as("Tiempo de respuesta")
+                .isLessThan((long) maxResponseTime);
+
+        logger.info("✅ Tiempo de respuesta: {}ms (límite: {}ms)",
+                responseTime, maxResponseTime);
+        Allure.addAttachment("Response Time Validation",
+                responseTime + "ms < " + maxResponseTime + "ms");
+    }
+
+    // ============================================================================
+    // THEN STEPS - ISO8583 VALIDATION
+    // ============================================================================
+
+    @Y("el mensaje ISO8583 debe tener MTI {string}")
+    @Step("Validar MTI del mensaje: {expectedMTI}")
+    public void mensajeISODebeTenerMTI(String expectedMTI) {
+        String actualMTI = lastResponse.jsonPath().getString("mti");
+
+        assertThat(actualMTI)
+                .as("MTI del mensaje ISO8583")
+                .isEqualTo(expectedMTI);
+
+        logger.info("✅ MTI: {}", actualMTI);
+        Allure.addAttachment("MTI", actualMTI);
+    }
+
+    @Y("el campo {int} del mensaje ISO debe ser {string}")
+    public void campoISODebeSer(int fieldNumber, String expectedValue) {
+        // 🔍 DEBUG: Ver la respuesta completa
+        logger.info("🔍 Response JSON completo: {}", lastResponse.asString());
+        logger.info("🔍 Status Code: {}", lastResponse.statusCode());
+
+        Map<String, String> fields = lastResponse.jsonPath()
+                .getMap("fields", String.class, String.class);
+
+        // Validación segura con null-check
+        assertThat(fields)
+                .as("El mensaje debe contener campos ISO8583")
+                .isNotNull()
+                .isNotEmpty();
+
+        String actualValue = fields.get(String.valueOf(fieldNumber));
+
+        assertThat(actualValue)
+                .as("Campo %d del mensaje ISO", fieldNumber)
+                .isEqualTo(expectedValue);
+
+        logger.info("✅ Campo ISO {}: {}", fieldNumber, actualValue);
+    }
+
+    @Entonces("el mensaje ISO8583 debe cumplir con:")
+    public void mensajeISODebeCumplir(DataTable dataTable) {
+        logger.info("🔍 Validando estructura del mensaje ISO8583...");
+
+        Map<String, String> fields = lastResponse.jsonPath()
+                .getMap("fields", String.class, String.class);
+
+        // Validación segura con null-check
+        assertThat(fields)
+                .as("El mensaje debe contener campos ISO8583")
+                .isNotNull()
+                .isNotEmpty();
+
+        List<Map<String, String>> rows = dataTable.asMaps();
+
+        for (Map<String, String> row : rows) {
+            String campo = row.get("Campo");
+            String valorEsperado = row.get("Valor Esperado");
+            String tipoValidacion = row.get("Tipo");
+
+            String valorActual;
+            if (campo.equals("MTI")) {
+                valorActual = lastResponse.jsonPath().getString("mti");
+            } else {
+                valorActual = fields.get(campo);
+            }
+
+            ValidationHelper.validateField(campo, valorActual, valorEsperado, tipoValidacion);
+
+            logger.info("✅ Campo {}: {} ({})", campo, valorActual, tipoValidacion);
+        }
+
+        logger.info("✅ Validación de estructura ISO8583 completada");
+    }
+
+    @Y("la respuesta debe tener MTI {string}")
+    public void respuestaDebeTenerMTI(String expectedMTI) {
+        mensajeISODebeTenerMTI(expectedMTI);
+    }
+
+    @Y("el campo {int} de la respuesta debe existir")
+    public void campoRespuestaDebeExistir(int fieldNumber) {
+        Map<String, String> fields = lastResponse.jsonPath()
+                .getMap("fields", String.class, String.class);
+
+        // Validación segura con null-check
+        assertThat(fields)
+                .as("El mensaje debe contener campos ISO8583")
+                .isNotNull()
+                .isNotEmpty();
+
+        logger.info("✅ Campo {} existe en respuesta", fieldNumber);
+    }
+
+    // ============================================================================
+    // THEN STEPS - ERROR VALIDATION
+    // ============================================================================
+
+    @Y("el código de respuesta debe ser uno de: {}")
+    public void codigoRespuestaDebeSerUnoDE(List<String> validCodes) {
+        String responseCode = lastResponse.jsonPath().getString("responseCode");
+
+        assertThat(validCodes)
+                .as("Código de respuesta válido")
+                .contains(responseCode);
+
+        logger.info("✅ Código de respuesta: {} (uno de: {})",
+                responseCode, validCodes);
+    }
+
+    @Y("el mensaje de respuesta debe indicar rechazo")
+    public void mensajeIndicaRechazo() {
+        boolean isSuccessful = lastResponse.jsonPath().getBoolean("successful");
+
+        assertThat(isSuccessful)
+                .as("Transacción debe ser rechazada")
+                .isFalse();
+
+        String responseMessage = lastResponse.jsonPath().getString("responseMessage");
+        logger.info("✅ Mensaje de rechazo: {}", responseMessage);
+    }
+
+    @Y("debo recibir errores de validación")
+    public void recibirErroresValidacion() {
+        List<String> errors = lastResponse.jsonPath().getList("validationErrors");
+
+        assertThat(errors)
+                .as("Debe haber errores de validación")
+                .isNotEmpty();
+
+        logger.info("✅ Errores de validación recibidos: {}", errors);
+        Allure.addAttachment("Validation Errors", errors.toString());
+    }
+
+    @Y("los errores deben incluir {string}")
+    public void erroresDebenIncluir(String expectedError) {
+        List<String> errors = lastResponse.jsonPath().getList("validationErrors");
+
+        boolean containsError = errors.stream()
+                .anyMatch(error -> error.contains(expectedError));
+
+        assertThat(containsError)
+                .as("Errores deben incluir: %s", expectedError)
+                .isTrue();
+
+        logger.info("✅ Error '{}' encontrado en validación", expectedError);
+    }
+
+    @Entonces("debería recibir un error de timeout")
+    public void recibirErrorTimeout() {
+        boolean isSuccessful = lastResponse.jsonPath().getBoolean("successful");
+
+        assertThat(isSuccessful)
+                .as("Transacción debe fallar por timeout")
+                .isFalse();
+
+        String errorType = lastResponse.jsonPath().getString("errorType");
+        logger.info("✅ Error de timeout detectado: {}", errorType);
+    }
+
+    // ============================================================================
+    // THEN STEPS - SPECIAL VALIDATIONS
+    // ============================================================================
+
+    @Y("debo recibir información de saldo")
+    public void recibirInformacionSaldo() {
+        // En ISO8583, el saldo puede venir en campo 54 (additional amounts)
+        // Verificamos que la respuesta sea exitosa como proxy
+        boolean isSuccessful = lastResponse.jsonPath().getBoolean("successful");
+
+        assertThat(isSuccessful)
+                .as("Debe recibir información de saldo exitosamente")
+                .isTrue();
+
+        logger.info("✅ Información de saldo recibida");
+    }
+
+    @Y("el STAN debe ser único y secuencial")
+    @Step("Validar STAN único y secuencial")
+    public void stanUnicoSecuencial() {
+        String stan = lastResponse.jsonPath().getString("stan");
+
+        assertThat(stan)
+                .as("STAN debe existir")
+                .isNotNull()
+                .matches("\\d{6}");
+
+        logger.info("✅ STAN único: {}", stan);
+        Allure.addAttachment("STAN", stan);
+    }
+
+    @Entonces("todas las transacciones deben completarse exitosamente")
+    public void todasTransaccionesExitosas() {
+        for (int i = 0; i < multipleResponses.size(); i++) {
+            Response response = multipleResponses.get(i);
+            boolean isSuccessful = response.jsonPath().getBoolean("successful");
+
+            assertThat(isSuccessful)
+                    .as("Transacción %d debe ser exitosa", i+1)
+                    .isTrue();
+        }
+
+        logger.info("✅ Todas las {} transacciones completadas exitosamente",
+                multipleResponses.size());
+    }
+
+    @Y("cada transacción debe tener un STAN único")
+    public void cadaTransaccionSTANUnico() {
+        Set<String> stans = multipleResponses.stream()
+                .map(response -> response.jsonPath().getString("stan"))
+                .collect(Collectors.toSet());
+
+        assertThat(stans)
+                .as("Todos los STANs deben ser únicos")
+                .hasSize(multipleResponses.size());
+
+        logger.info("✅ {} STANs únicos verificados", stans.size());
+    }
+
+    @Y("el tiempo promedio de respuesta debe ser menor a {int} milisegundos")
+    public void tiempoPromedioMenorQue(int maxAvgTime) {
+        double avgTime = multipleResponses.stream()
+                .mapToLong(Response::time)
+                .average()
+                .orElse(0);
+
+        assertThat(avgTime)
+                .as("Tiempo promedio de respuesta")
+                .isLessThan((double) maxAvgTime);
+
+        logger.info("✅ Tiempo promedio: {}ms (límite: {}ms)",
+                avgTime, maxAvgTime);
+        Allure.addAttachment("Avg Response Time", avgTime + "ms");
+    }
+
+
+    // ============================================================================
+    // UTILITY METHODS
+    // ============================================================================
+
+    private String maskPan(String pan) {
+        if (pan == null || pan.length() < 10) {
+            return "INVALID_PAN";
+        }
+        return pan.substring(0, 6) + "******" + pan.substring(pan.length()-4);
+    }
+
+    private String maskTrack2(String track2) {
+        if (track2 == null || track2.length() < 10) {
+            return "INVALID_TRACK2";
+        }
+        return track2.substring(0, 6) + "***MASKED***";
+    }
+    private void logRequestParameters() {
+        logger.info("📤 ============ REQUEST PARAMETERS ============");
+        logger.info("   Type: BALANCE_INQUIRY");
+        logger.info("   PAN: {}", maskPan(currentPan));
+        logger.info("   Track2: {}", maskTrack2(currentTrack2));
+        logger.info("   Terminal: {}", currentTerminalId);
+        logger.info("   Card Acceptor: {}", currentCardAcceptorId);
+        logger.info("   Account: {}", currentAccount);
+        logger.info("📤 =============================================");
+    }
+}

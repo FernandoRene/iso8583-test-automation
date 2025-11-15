@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ============================================================================ -->
+    <!-- PROPIEDADES GLOBALES -->
+    <!-- ============================================================================ -->
+
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+    <property name="LOG_PATTERN_COLOR" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{36}) - %msg%n"/>
+
+    <!-- ============================================================================ -->
+    <!-- APPENDERS - SALIDA DE LOGS -->
+    <!-- ============================================================================ -->
+
+    <!-- CONSOLA - Para ver logs durante ejecución -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN_COLOR}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ARCHIVO GENERAL - Todos los logs -->
+    <appender name="FILE_ALL" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>target/logs/test-automation.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>target/logs/test-automation-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- ARCHIVO ERROR - Solo errores -->
+    <appender name="FILE_ERROR" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>target/logs/errors.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>target/logs/errors-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- ARCHIVO TRANSACCIONES - Solo logs de transacciones -->
+    <appender name="FILE_TRANSACTIONS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>target/logs/transactions.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>target/logs/transactions-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- ARCHIVO ALLURE - Para adjuntar a reportes -->
+    <appender name="FILE_ALLURE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>target/allure-results/test-execution.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>target/allure-results/test-execution-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- ============================================================================ -->
+    <!-- LOGGERS POR PAQUETE -->
+    <!-- ============================================================================ -->
+
+    <!-- LOGS DEL PROYECTO (com.iso8583.test) -->
+    <logger name="com.iso8583.test" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+        <appender-ref ref="FILE_ERROR"/>
+        <appender-ref ref="FILE_ALLURE"/>
+    </logger>
+
+    <!-- LOGS DE STEPS (más verbosos) -->
+    <logger name="com.iso8583.test.steps" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+        <appender-ref ref="FILE_TRANSACTIONS"/>
+        <appender-ref ref="FILE_ALLURE"/>
+    </logger>
+
+    <!-- LOGS DE SERVICES -->
+    <logger name="com.iso8583.test.services" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+        <appender-ref ref="FILE_TRANSACTIONS"/>
+        <appender-ref ref="FILE_ALLURE"/>
+    </logger>
+
+    <!-- LOGS DE CLIENT (HTTP) -->
+    <logger name="com.iso8583.test.client" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+        <appender-ref ref="FILE_ALLURE"/>
+    </logger>
+
+    <!-- LOGS DE ALLURE HELPER -->
+    <logger name="com.iso8583.test.utils.AllureReportHelper" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+    </logger>
+
+    <!-- ============================================================================ -->
+    <!-- LOGGERS DE LIBRERÍAS EXTERNAS -->
+    <!-- ============================================================================ -->
+
+    <!-- REST ASSURED - Logs HTTP detallados -->
+    <logger name="io.restassured" level="INFO" additivity="false">
+        <appender-ref ref="FILE_ALL"/>
+    </logger>
+
+    <!-- CUCUMBER - Framework BDD -->
+    <logger name="io.cucumber" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+    </logger>
+
+    <!-- ALLURE - Reportes -->
+    <logger name="io.qameta.allure" level="INFO" additivity="false">
+        <appender-ref ref="FILE_ALL"/>
+    </logger>
+
+    <!-- GSON - JSON parsing (solo errores) -->
+    <logger name="com.google.gson" level="WARN" additivity="false">
+        <appender-ref ref="FILE_ERROR"/>
+    </logger>
+
+    <!-- APACHE HTTP CLIENT (usado por RestAssured) -->
+    <logger name="org.apache.http" level="WARN" additivity="false">
+        <appender-ref ref="FILE_ALL"/>
+    </logger>
+
+    <!-- ============================================================================ -->
+    <!-- ROOT LOGGER - FALLBACK -->
+    <!-- ============================================================================ -->
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_ALL"/>
+        <appender-ref ref="FILE_ERROR"/>
+    </root>
+
+    <!-- ============================================================================ -->
+    <!-- CONFIGURACIÓN ESPECIAL PARA DEBUGGING -->
+    <!-- ============================================================================ -->
+
+    <!--
+    Para activar logs MUY DETALLADOS durante debugging, descomentar:
+
+    <logger name="com.iso8583.test" level="TRACE"/>
+    <logger name="io.restassured" level="DEBUG"/>
+    <logger name="org.apache.http" level="DEBUG"/>
+    -->
+
+</configuration>

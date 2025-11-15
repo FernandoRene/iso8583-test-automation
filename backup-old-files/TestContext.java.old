@@ -1,0 +1,399 @@
+package com.iso8583.test.utils;
+
+import com.iso8583.test.client.ISO8583ApiClient;
+import com.iso8583.test.models.TransactionRequest;
+import com.iso8583.test.models.TransactionResponse;
+import com.iso8583.test.services.TransactionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Contexto compartido entre Steps de Cucumber
+ *
+ * Propósito:
+ * - Compartir estado entre diferentes steps de un scenario
+ * - Almacenar request/response actual
+ * - Almacenar servicios inicializados (ApiClient, TransactionService)
+ * - Proporcionar almacenamiento temporal para datos del scenario
+ *
+ * Patrón: Singleton por Scenario (gracias a PicoContainer de Cucumber)
+ * Cada scenario de Cucumber tiene su propia instancia de TestContext
+ */
+public class TestContext {
+
+    private static final Logger logger = LoggerFactory.getLogger(TestContext.class);
+
+    // ============================================================================
+    // SERVICIOS Y CLIENTES
+    // ============================================================================
+
+    private ISO8583ApiClient apiClient;
+    private TransactionService transactionService;
+
+    // ============================================================================
+    // ESTADO DE TRANSACCIÓN ACTUAL
+    // ============================================================================
+
+    /**
+     * Request actual que se está construyendo o se envió
+     */
+    private TransactionRequest currentRequest;
+
+    /**
+     * Response actual recibida del simulador
+     */
+    private TransactionResponse currentResponse;
+
+    /**
+     * Builder para construir el request paso a paso
+     * Los steps de "Given" van agregando campos al builder
+     */
+    private TransactionRequest.TransactionRequestBuilder requestBuilder;
+
+    // ============================================================================
+    // ESTADO PARA ESCENARIOS DE MÚLTIPLES TRANSACCIONES
+    // ============================================================================
+
+    /**
+     * Lista de responses para scenarios que envían múltiples transacciones
+     * Ejemplo: "Cuando envío 5 solicitudes consecutivas"
+     */
+    private List<TransactionResponse> multipleResponses;
+
+    /**
+     * Timestamp de inicio de la transacción (para medir tiempos)
+     */
+    private long transactionStartTime;
+
+    // ============================================================================
+    // ALMACENAMIENTO TEMPORAL GENÉRICO
+    // ============================================================================
+
+    /**
+     * Map genérico para almacenar cualquier dato temporal del scenario
+     * Útil para casos especiales sin necesidad de agregar campos específicos
+     */
+    private Map<String, Object> scenarioData;
+
+    // ============================================================================
+    // CONSTRUCTOR
+    // ============================================================================
+
+    public TestContext() {
+        logger.debug("🏗️ Nuevo TestContext creado para scenario");
+        this.multipleResponses = new ArrayList<>();
+        this.scenarioData = new HashMap<>();
+    }
+
+    // ============================================================================
+    // INICIALIZACIÓN DE SERVICIOS
+    // ============================================================================
+
+    /**
+     * Inicializa el ApiClient y TransactionService con la URL base
+     */
+    public void initializeServices(String baseUrl) {
+        logger.info("🔧 Inicializando servicios con baseUrl: {}", baseUrl);
+
+        this.apiClient = new ISO8583ApiClient(baseUrl);
+        this.transactionService = new TransactionService(apiClient);
+
+        logger.debug("✅ Servicios inicializados");
+    }
+
+    /**
+     * Verifica si los servicios están inicializados
+     */
+    public boolean areServicesInitialized() {
+        return apiClient != null && transactionService != null;
+    }
+
+    // ============================================================================
+    // GESTIÓN DEL REQUEST BUILDER
+    // ============================================================================
+
+    /**
+     * Inicia un nuevo builder para construir el request
+     */
+    public TransactionRequest.TransactionRequestBuilder startNewRequest() {
+        logger.debug("🆕 Iniciando nuevo request builder");
+        this.requestBuilder = TransactionRequest.builder();
+        return this.requestBuilder;
+    }
+
+    /**
+     * Obtiene el builder actual (lo crea si no existe)
+     */
+    public TransactionRequest.TransactionRequestBuilder getRequestBuilder() {
+        if (requestBuilder == null) {
+            logger.debug("⚠️ Builder no existía, creando nuevo");
+            startNewRequest();
+        }
+        return requestBuilder;
+    }
+
+    /**
+     * Construye y guarda el request final desde el builder
+     */
+    public TransactionRequest buildAndSetRequest() {
+        if (requestBuilder == null) {
+            throw new IllegalStateException("No hay builder activo. Usa startNewRequest() primero");
+        }
+
+        this.currentRequest = requestBuilder.build();
+        logger.debug("✅ Request construido y guardado: {}", currentRequest.getTransactionType());
+
+        return this.currentRequest;
+    }
+
+    // ============================================================================
+    // GETTERS Y SETTERS - REQUEST/RESPONSE
+    // ============================================================================
+
+    public TransactionRequest getCurrentRequest() {
+        return currentRequest;
+    }
+
+    public void setCurrentRequest(TransactionRequest currentRequest) {
+        this.currentRequest = currentRequest;
+        logger.debug("📝 Request actual actualizado: {}",
+                currentRequest != null ? currentRequest.getTransactionType() : "null");
+    }
+
+    public TransactionResponse getCurrentResponse() {
+        return currentResponse;
+    }
+
+    public void setCurrentResponse(TransactionResponse currentResponse) {
+        this.currentResponse = currentResponse;
+        logger.debug("📝 Response actual actualizada - Código: {}",
+                currentResponse != null ? currentResponse.getResponseCode() : "null");
+    }
+
+    // ============================================================================
+    // GETTERS - SERVICIOS
+    // ============================================================================
+
+    public ISO8583ApiClient getApiClient() {
+        if (apiClient == null) {
+            throw new IllegalStateException(
+                    "ApiClient no inicializado. Ejecuta initializeServices(baseUrl) primero"
+            );
+        }
+        return apiClient;
+    }
+
+    public TransactionService getTransactionService() {
+        if (transactionService == null) {
+            throw new IllegalStateException(
+                    "TransactionService no inicializado. Ejecuta initializeServices(baseUrl) primero"
+            );
+        }
+        return transactionService;
+    }
+
+    // ============================================================================
+    // MÚLTIPLES TRANSACCIONES
+    // ============================================================================
+
+    /**
+     * Agrega una response a la lista de múltiples transacciones
+     */
+    public void addResponse(TransactionResponse response) {
+        multipleResponses.add(response);
+        logger.debug("➕ Response agregada a lista múltiple (total: {})", multipleResponses.size());
+    }
+
+    /**
+     * Obtiene todas las responses de transacciones múltiples
+     */
+    public List<TransactionResponse> getMultipleResponses() {
+        return new ArrayList<>(multipleResponses); // Retornar copia para evitar modificaciones
+    }
+
+    /**
+     * Limpia la lista de múltiples responses
+     */
+    public void clearMultipleResponses() {
+        logger.debug("🧹 Limpiando lista de múltiples responses");
+        multipleResponses.clear();
+    }
+
+    /**
+     * Obtiene el número de transacciones múltiples almacenadas
+     */
+    public int getMultipleResponsesCount() {
+        return multipleResponses.size();
+    }
+
+    // ============================================================================
+    // MEDICIÓN DE TIEMPOS
+    // ============================================================================
+
+    /**
+     * Marca el inicio de una transacción para medir tiempos
+     */
+    public void startTransactionTimer() {
+        this.transactionStartTime = System.currentTimeMillis();
+        logger.debug("⏱️ Timer de transacción iniciado");
+    }
+
+    /**
+     * Obtiene el tiempo transcurrido desde el inicio de la transacción
+     */
+    public long getElapsedTime() {
+        if (transactionStartTime == 0) {
+            logger.warn("⚠️ Timer no fue iniciado");
+            return 0;
+        }
+        return System.currentTimeMillis() - transactionStartTime;
+    }
+
+    /**
+     * Resetea el timer de transacción
+     */
+    public void resetTransactionTimer() {
+        this.transactionStartTime = 0;
+        logger.debug("🔄 Timer reseteado");
+    }
+
+    // ============================================================================
+    // ALMACENAMIENTO TEMPORAL GENÉRICO
+    // ============================================================================
+
+    /**
+     * Guarda un dato temporal en el contexto del scenario
+     */
+    public void setData(String key, Object value) {
+        scenarioData.put(key, value);
+        logger.debug("💾 Dato guardado: {} = {}", key, value);
+    }
+
+    /**
+     * Obtiene un dato temporal del contexto
+     */
+    public Object getData(String key) {
+        return scenarioData.get(key);
+    }
+
+    /**
+     * Obtiene un dato temporal con casting automático
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getData(String key, Class<T> type) {
+        Object value = scenarioData.get(key);
+        if (value == null) {
+            return null;
+        }
+
+        if (type.isInstance(value)) {
+            return (T) value;
+        }
+
+        throw new ClassCastException(
+                String.format("Dato '%s' no es del tipo esperado %s (es %s)",
+                        key, type.getSimpleName(), value.getClass().getSimpleName())
+        );
+    }
+
+    /**
+     * Verifica si existe un dato temporal
+     */
+    public boolean hasData(String key) {
+        return scenarioData.containsKey(key);
+    }
+
+    /**
+     * Elimina un dato temporal
+     */
+    public void removeData(String key) {
+        scenarioData.remove(key);
+        logger.debug("🗑️ Dato eliminado: {}", key);
+    }
+
+    // ============================================================================
+    // LIMPIEZA DE CONTEXTO
+    // ============================================================================
+
+    /**
+     * Limpia todo el contexto para un nuevo scenario
+     * Este método se llama típicamente en los hooks de @Before
+     */
+    public void clear() {
+        logger.debug("🧹 Limpiando TestContext completo");
+
+        this.currentRequest = null;
+        this.currentResponse = null;
+        this.requestBuilder = null;
+        this.multipleResponses.clear();
+        this.scenarioData.clear();
+        this.transactionStartTime = 0;
+
+        // NO limpiamos apiClient ni transactionService - se reutilizan
+
+        logger.debug("✅ TestContext limpio");
+    }
+
+    /**
+     * Limpia solo los datos de transacción (mantiene servicios)
+     * Útil entre steps dentro del mismo scenario
+     */
+    public void clearTransactionData() {
+        logger.debug("🧹 Limpiando solo datos de transacción");
+
+        this.currentRequest = null;
+        this.currentResponse = null;
+        this.requestBuilder = null;
+        this.transactionStartTime = 0;
+
+        logger.debug("✅ Datos de transacción limpios");
+    }
+
+    // ============================================================================
+    // MÉTODOS DE UTILIDAD
+    // ============================================================================
+
+    /**
+     * Verifica si hay una transacción actual en progreso
+     */
+    public boolean hasCurrentTransaction() {
+        return currentRequest != null || requestBuilder != null;
+    }
+
+    /**
+     * Verifica si hay una response actual disponible
+     */
+    public boolean hasCurrentResponse() {
+        return currentResponse != null;
+    }
+
+    /**
+     * Obtiene un resumen del estado actual del contexto (para debugging)
+     */
+    public String getContextSummary() {
+        return String.format(
+                "TestContext[" +
+                        "services=%s, " +
+                        "currentRequest=%s, " +
+                        "currentResponse=%s, " +
+                        "multipleResponses=%d, " +
+                        "scenarioData=%d items" +
+                        "]",
+                areServicesInitialized() ? "initialized" : "not initialized",
+                currentRequest != null ? currentRequest.getTransactionType() : "null",
+                currentResponse != null ? currentResponse.getResponseCode() : "null",
+                multipleResponses.size(),
+                scenarioData.size()
+        );
+    }
+
+    @Override
+    public String toString() {
+        return getContextSummary();
+    }
+}
