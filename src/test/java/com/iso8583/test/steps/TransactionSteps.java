@@ -11,6 +11,9 @@ import io.qameta.allure.Allure;
 import io.qameta.allure.Step;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -263,6 +266,70 @@ public class TransactionSteps {
         Allure.addAttachment("STAN Validado", stan);
     }
 
+    /**
+     * Valida que un campo ISO8583 específico exista en la respuesta
+     */
+//    @Y("el campo {int} del mensaje ISO debe existir")
+//    @Y("el campo {int} de la respuesta debe existir")
+//    @Step("Validar existencia del campo ISO8583 {fieldNumber}")
+//    public void validarCampoISOExiste(int fieldNumber) {
+//        TransactionResponse response = context.getCurrentResponse();
+//
+//        boolean exists = response.hasIsoField(fieldNumber);
+//
+//        assertThat(exists)
+//                .as("Campo ISO8583 %d debe existir", fieldNumber)
+//                .isTrue();
+//
+//        String fieldValue = response.getIsoField(fieldNumber);
+//        logger.info("✅ Campo {} existe con valor: {}", fieldNumber, fieldValue);
+//
+//        Allure.addAttachment("Campo ISO " + fieldNumber, fieldValue != null ? fieldValue : "null");
+//    }
+
+    /**
+     * Valida el valor de un campo ISO8583 específico
+     */
+//    @Y("el campo {int} del mensaje ISO debe ser {string}")
+//    @Y("el campo {int} de la respuesta debe ser {string}")
+//    @Step("Validar campo ISO8583 {fieldNumber} = {expectedValue}")
+//    public void validarCampoISOValor(int fieldNumber, String expectedValue) {
+//        TransactionResponse response = context.getCurrentResponse();
+//
+//        String actualValue = response.getIsoField(fieldNumber);
+//
+//        assertThat(actualValue)
+//                .as("Campo ISO8583 %d", fieldNumber)
+//                .isNotNull()
+//                .isEqualTo(expectedValue);
+//
+//        logger.info("✅ Campo {} validado: {} = {}", fieldNumber, actualValue, expectedValue);
+//
+//        Allure.addAttachment("Campo ISO " + fieldNumber,
+//                String.format("Esperado: %s, Actual: %s", expectedValue, actualValue));
+//    }
+
+
+
+    /**
+     * Valida que un campo ISO8583 contenga cierto texto
+     */
+    @Y("el campo {int} del mensaje ISO debe contener {string}")
+    @Step("Validar campo ISO8583 {fieldNumber} contiene {expectedText}")
+    public void validarCampoISOContiene(int fieldNumber, String expectedText) {
+        TransactionResponse response = context.getCurrentResponse();
+
+        String actualValue = response.getIsoField(fieldNumber);
+
+        assertThat(actualValue)
+                .as("Campo ISO8583 %d", fieldNumber)
+                .isNotNull()
+                .contains(expectedText);
+
+        logger.info("✅ Campo {} contiene '{}': {}", fieldNumber, expectedText, actualValue);
+
+        Allure.addAttachment("Campo ISO " + fieldNumber, actualValue);
+    }
     // ============================================================================
     // THEN STEPS - VALIDACIONES DE MÚLTIPLES TRANSACCIONES
     // ============================================================================
@@ -387,10 +454,13 @@ public class TransactionSteps {
         logger.info("✅ Error de timeout detectado: {}", response.getErrorType());
     }
 
-    @Y("el código de respuesta debe ser uno de: {}")
+    @Y("el código de respuesta debe ser uno de: {string}")
     @Step("Validar código de respuesta en lista")
-    public void validarCodigoRespuestaEnLista(java.util.List<String> validCodes) {
+    public void validarCodigoRespuestaEnLista(String codigosString) {
         TransactionResponse response = context.getCurrentResponse();
+
+        // Parsear string a lista
+        java.util.List<String> validCodes = parsearListaCodigos(codigosString);
 
         assertThat(validCodes)
                 .as("Código de respuesta válido")
@@ -398,6 +468,9 @@ public class TransactionSteps {
 
         logger.info("✅ Código de respuesta: {} (uno de: {})",
                 response.getResponseCode(), validCodes);
+
+        Allure.addAttachment("Códigos Válidos", String.join(", ", validCodes));
+        Allure.addAttachment("Código Actual", response.getResponseCode());
     }
 
     // ============================================================================
@@ -416,5 +489,32 @@ public class TransactionSteps {
             return "INVALID_TRACK2";
         }
         return track2.substring(0, 6) + "***MASKED***";
+    }
+
+    /**
+     * Parsea string de códigos a lista
+     * Soporta formatos:
+     * - "14, 25, 51"           (comma-separated)
+     * - '["14", "25", "51"]'   (JSON array)
+     * - "14|25|51"             (pipe-separated)
+     */
+    private java.util.List<String> parsearListaCodigos(String codigosString) {
+        if (codigosString == null || codigosString.trim().isEmpty()) {
+            throw new IllegalArgumentException("Lista de códigos vacía");
+        }
+
+        // Limpiar string: remover brackets y quotes
+        String cleaned = codigosString.trim()
+                .replaceAll("[\\[\\]]", "")  // Remover [ ]
+                .replaceAll("[\"']", "");     // Remover " '
+
+        // Determinar separador (coma o pipe)
+        String separator = cleaned.contains("|") ? "\\|" : ",";
+
+        // Split y limpiar cada código
+        return java.util.Arrays.stream(cleaned.split(separator))
+                .map(String::trim)
+                .filter(code -> !code.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
     }
 }

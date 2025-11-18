@@ -4,6 +4,7 @@ import com.iso8583.test.config.TestContext;
 import com.iso8583.test.config.TestContextFactory;
 import com.iso8583.test.services.ConnectionService;
 import io.cucumber.java.es.*;
+import io.qameta.allure.Allure;
 import io.qameta.allure.Step;
 
 import java.util.Map;
@@ -59,42 +60,85 @@ public class ConnectionSteps {
     @Dado("la conexión con el autorizador está establecida")
     @Step("Establecer conexión con autorizador")
     public void establecerConexion() throws Exception {
-        System.out.println("🔗 Estableciendo conexión con el autorizador...");
+        //String modo = context.getModo();
+        String modo = context.getConnectionService().getSimulatorMode();
+
+        System.out.println("🔗 Estableciendo conexión en modo: " + modo);
 
         // 1. Asegurar conexión básica
         context.ensureConnection();
 
-        // ✅ FIX 2: Validar estado REAL de la conexión
+        // 2. Obtener estado REAL de la conexión
         ConnectionService.ConnectionStatus status = context.getConnectionService().getStatus();
 
-        boolean isConnected = status.isConnected();
-        boolean channelConnected = status.isChannelConnected();
+        // ================================================================
+        // ✅ VALIDACIÓN SEGÚN MODO
+        // ================================================================
+        if ("MOCK".equals(modo)) {
+            // ========== MODO MOCK ==========
+            System.out.println("🎭 ==========================================");
+            System.out.println("🎭 VALIDANDO CONEXIÓN EN MODO MOCK");
+            System.out.println("🎭 ==========================================");
+            System.out.println("🎭 Modo: " + status.getMode());
+            System.out.println("🎭 TCP requerido: NO");
+            System.out.println("🎭 Simulador: MessageSimulator");
+            System.out.println("🎭 ==========================================");
 
-        System.out.println("📊 Estado de conexión:");
-        System.out.println("   - Simulador Connected: " + isConnected);
-        System.out.println("   - Channel Connected: " + channelConnected);
-        System.out.println("   - Socket: " + status.getSocketInfo());
-
-        // ✅ FIX 3: Validar ambos estados antes de continuar
-        if (!status.isFullyConnected()) {
-            // Intentar reconectar una vez más
-            System.out.println("⚠️ Conexión no completada, intentando reconectar...");
-            Thread.sleep(1000);
-
-            context.getConnectionService().verifyAndReconnect();
-
-            // Verificar nuevamente
-            status = context.getConnectionService().getStatus();
-
-            if (!status.isFullyConnected()) {
-                throw new RuntimeException(String.format(
-                        "❌ Conexión no establecida correctamente - Connected: %s, Channel: %s",
-                        status.isConnected(), status.isChannelConnected()
-                ));
+            // En MOCK no validamos canal TCP (no existe)
+            if (!"MOCK".equalsIgnoreCase(status.getMode())) {
+                throw new RuntimeException("❌ Se esperaba modo MOCK pero está en: " + status.getMode());
             }
-        }
 
-        System.out.println("✅ Conexión verificada y completamente activa");
+            // Adjuntar a Allure
+            Allure.addAttachment("Modo de Conexión", "text/plain",
+                    "MOCK - MessageSimulator (sin conexión TCP)");
+            Allure.addAttachment("TCP Requerido", "text/plain", "NO");
+
+            System.out.println("✅ Conexión MOCK validada correctamente");
+            System.out.println("✅ Listo para testing sin autorizador real");
+
+        } else if ("REAL".equals(modo)) {
+            // ========== MODO REAL ==========
+            System.out.println("🔌 ==========================================");
+            System.out.println("🔌 VALIDANDO CONEXIÓN EN MODO REAL");
+            System.out.println("🔌 ==========================================");
+            System.out.println("🔌 Modo: " + status.getMode());
+            System.out.println("🔌 Simulador Connected: " + status.isConnected());
+            System.out.println("🔌 Channel Connected: " + status.isChannelConnected());
+            System.out.println("🔌 Socket: " + status.getSocketInfo());
+            System.out.println("🔌 ==========================================");
+
+            // En REAL validamos canal TCP activo
+            if (!status.isFullyConnected()) {
+                // Intentar reconectar una vez más
+                System.out.println("⚠️ Conexión no completada, intentando reconectar...");
+                Thread.sleep(1000);
+
+                context.getConnectionService().verifyAndReconnect();
+
+                // Verificar nuevamente
+                status = context.getConnectionService().getStatus();
+
+                if (!status.isFullyConnected()) {
+                    throw new RuntimeException(String.format(
+                            "❌ Conexión REAL no establecida - Connected: %s, Channel: %s",
+                            status.isConnected(), status.isChannelConnected()
+                    ));
+                }
+            }
+
+            // Adjuntar a Allure
+            Allure.addAttachment("Modo de Conexión", "text/plain",
+                    "REAL - Autorizador " + status.getBaseUrl());
+            Allure.addAttachment("Socket Info", "text/plain",
+                    status.getSocketInfo() != null ? status.getSocketInfo() : "N/A");
+            Allure.addAttachment("Canal TCP", "text/plain", "ACTIVO");
+
+            System.out.println("✅ Conexión REAL verificada y completamente activa");
+
+        } else {
+            throw new RuntimeException("❌ Modo desconocido: " + modo);
+        }
     }
 
     // ============================================================================

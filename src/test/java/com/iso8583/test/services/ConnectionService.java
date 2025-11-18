@@ -34,6 +34,7 @@ public class ConnectionService {
 
     /**
      * Conecta al simulador y mantiene la conexión activa
+     * ✅ MEJORADO: Lee información completa del modo
      */
     public void connect() {
         if (connected) {
@@ -53,14 +54,27 @@ public class ConnectionService {
                     .response();
 
             if (response.getStatusCode() == 200) {
-                connected = true;
-                logger.info("✅ Conectado exitosamente al simulador");
+                // ✅ Leer JSON completo de la respuesta
+                Map<String, Object> responseBody = response.jsonPath().getMap("$");
 
-                // ✅ FIX: Esperar que la conexión se estabilice
+                String mode = (String) responseBody.get("mode");
+                Boolean tcpRequired = (Boolean) responseBody.get("tcpConnectionRequired");
+                String simulatorType = (String) responseBody.get("simulatorType");
+
+                connected = true;
+                this.simulatorMode = mode; // Actualizar modo desde respuesta
+
+                logger.info("✅ Conectado exitosamente al simulador");
+                logger.info("   Modo: {}", mode);
+                logger.info("   Simulador: {}", simulatorType);
+                logger.info("   TCP requerido: {}", tcpRequired);
+
+                // ✅ Esperar que la conexión se estabilice
                 Thread.sleep(500);
 
             } else {
                 logger.error("❌ Error conectando: {}", response.getStatusCode());
+                logger.error("   Body: {}", response.getBody().asString());
                 connected = false;
             }
         } catch (Exception e) {
@@ -272,6 +286,8 @@ public class ConnectionService {
                 simulatorMode,
                 (String) realStatus.get("socketInfo")
         );
+
+
     }
 
     public String getBaseUrl() {

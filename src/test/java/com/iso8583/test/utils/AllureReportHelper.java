@@ -104,6 +104,7 @@ public class AllureReportHelper {
             responseData.put("httpStatusCode", response.getHttpStatusCode());
             responseData.put("validationErrors", response.getValidationErrors());
             responseData.put("validationWarnings", response.getValidationWarnings());
+            responseData.put("ISOList",response.getIsoFields());
 
             String json = gson.toJson(responseData);
             Allure.addAttachment("📥 Response", "application/json", json, ".json");

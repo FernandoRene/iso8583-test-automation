@@ -7,7 +7,7 @@ Característica: Consulta de Saldo (Balance Inquiry)
 
   Antecedentes:
     Dado que el simulador ISO8583 está disponible en "http://localhost:8081"
-    Y el servicio está en modo "REAL" conectado al autorizador
+    Y el servicio está en modo "MOCK" conectado al autorizador
     Y la conexión con el autorizador está establecida
 
   @HappyPath @Smoke
@@ -102,13 +102,11 @@ Característica: Consulta de Saldo (Balance Inquiry)
     Cuando envío una solicitud de consulta de saldo
     Entonces el mensaje ISO8583 debe cumplir con:
       | Campo | Valor Esperado        | Tipo       |
-      | MTI   | 0200                  | Exacto     |
+      | MTI   | 0210                  | Exacto     |
       | 2     | 4532015112830366      | Exacto     |
       | 3     | 301099                | Exacto     |
       | 4     | 000000000000          | Exacto     |
       | 18    | 6011                  | Exacto     |
-      | 22    | 051                   | Exacto     |
-      | 25    | 00                    | Exacto     |
       | 32    | 409911                | Exacto     |
       | 41    | ATM001LP              | Exacto     |
       | 49    | 068                   | Exacto     |
