@@ -270,6 +270,45 @@ public class ISO8583ApiClient {
     }
 
     /**
+     * Envía una transacción de Deposit
+     * @param request Request de la transacción
+     * @return Response con el resultado
+     */
+    public Response sendDeposit(Object request) {
+        System.out.println("💰 POST /api/v1/transactions/deposit");
+
+        return given()
+                .spec(requestSpec)
+                .body(request)
+                .when()
+                .post("/api/v1/transactions/deposit")
+                .then()
+                .spec(responseSpec)
+                .extract()
+                .response();
+    }
+
+    /**
+     * Envía una transacción de Cashback
+     * @param request Request de la transacción
+     * @return Response con el resultado
+     */
+    public Response sendCashback(Object request) {
+        System.out.println("💵 POST /api/v1/transactions/cashback");
+
+        return given()
+                .spec(requestSpec)
+                .body(request)
+                .when()
+                .post("/api/v1/transactions/cashback")
+                .then()
+                .spec(responseSpec)
+                .extract()
+                .response();
+    }
+
+
+    /**
      * Envía una transacción genérica al endpoint /process
      * @param request Request de la transacción
      * @return Response con el resultado

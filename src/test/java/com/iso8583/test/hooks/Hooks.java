@@ -2,159 +2,151 @@ package com.iso8583.test.hooks;
 
 import com.iso8583.test.config.TestContext;
 import com.iso8583.test.config.TestContextFactory;
-import io.cucumber.java.After;
-import io.cucumber.java.AfterAll;
-import io.cucumber.java.Before;
-import io.cucumber.java.BeforeAll;
-import io.cucumber.java.Scenario;
+import com.iso8583.test.utils.ScreenshotHelper;
+import com.iso8583.test.utils.TestCoverageReporter;
+import io.cucumber.java.*;
+import io.qameta.allure.Allure;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Hooks de Cucumber para inicialización y limpieza del contexto de prueba
- * Se ejecutan automáticamente antes/después de cada escenario
- * VERSIÓN SIN SPRING BOOT, SIN LOMBOK
+ * Hooks de Cucumber mejorados con reportes avanzados
  */
 public class Hooks {
 
+    private static final Logger logger = LoggerFactory.getLogger(Hooks.class);
     private final TestContext testContext;
+    private static boolean dashboardGenerated = false;
 
     public Hooks() {
-        // ✅ Usar Singleton en lugar de inyección
         this.testContext = TestContextFactory.getInstance().getTestContext();
     }
-    // Constructor manual (reemplaza @RequiredArgsConstructor de Lombok)
-//    public Hooks(TestContext testContext) {
-//        this.testContext = testContext;
-//    }
 
-    /**
-     * Se ejecuta UNA VEZ antes de todos los escenarios
-     */
-//    @BeforeAll
-//    public static void beforeAll() {
-//        System.out.println("═══════════════════════════════════════════════════════════════");
-//        System.out.println("🚀 INICIANDO SUITE DE PRUEBAS ISO8583");
-//        System.out.println("═══════════════════════════════════════════════════════════════");
-//    }
+    @BeforeAll
+    public static void beforeAll() {
+        logger.info("═".repeat(60));
+        logger.info("🚀 INICIANDO SUITE DE TESTS ISO8583");
+        logger.info("═".repeat(60));
+        TestCoverageReporter.reset();
+        dashboardGenerated = false;
+    }
 
-    /**
-     * Se ejecuta ANTES de cada escenario
-     */
     @Before(order = 1)
     public void beforeScenario(Scenario scenario) {
-        System.out.println("───────────────────────────────────────────────────────────────");
-        System.out.println("📝 ESCENARIO: " + scenario.getName());
-        System.out.println("📂 Feature: " + scenario.getUri());
-        System.out.println("🏷️  Tags: " + scenario.getSourceTagNames());
-        System.out.println("───────────────────────────────────────────────────────────────");
+        logger.info("─".repeat(60));
+        logger.info("📋 ESCENARIO: {}", scenario.getName());
+        logger.info("📂 Feature: {}", scenario.getUri());
+        logger.info("🏷️  Tags: {}", scenario.getSourceTagNames());
+        logger.info("─".repeat(60));
 
-        // Resetear contexto para nueva prueba
         testContext.reset();
 
-        System.out.println("✅ TestContext reseteado para nuevo escenario");
+        // Allure metadata
+        Allure.epic("ISO8583 Test Automation");
+        Allure.feature(getFeatureName(scenario));
+        Allure.story(scenario.getName());
+        scenario.getSourceTagNames().forEach(tag ->
+                Allure.label("tag", tag.replace("@", ""))
+        );
+
+        logger.info("✅ TestContext reseteado para nuevo escenario");
     }
 
-    /**
-     * Se ejecuta ANTES de cada escenario - Asegurar conexión si tiene tag @RequiresConnection
-     */
     @Before(value = "@RequiresConnection", order = 2)
     public void ensureConnectionForTaggedScenarios(Scenario scenario) {
-        System.out.println("🔌 Escenario requiere conexión - Asegurando conexión activa...");
+        logger.info("🔌 Escenario requiere conexión - Asegurando conexión activa...");
         testContext.ensureConnection();
-        System.out.println("✅ Conexión asegurada para: " + scenario.getName());
+        logger.info("✅ Conexión asegurada para: {}", scenario.getName());
     }
 
-    /**
-     * Se ejecuta DESPUÉS de cada escenario
-     */
     @After
     public void afterScenario(Scenario scenario) {
-        // Log del resultado
         String status = scenario.getStatus().toString();
         String emoji = scenario.isFailed() ? "❌" : "✅";
 
-        System.out.println("───────────────────────────────────────────────────────────────");
-        System.out.println(emoji + " RESULTADO: " + status + " - " + scenario.getName());
+        logger.info("─".repeat(60));
+        logger.info("{} RESULTADO: {} - {}", emoji, status, scenario.getName());
 
-        // Si falló, log del estado actual para debugging
-        if (scenario.isFailed()) {
-            System.err.println("❌ ESCENARIO FALLÓ - Logging estado del contexto:");
-            testContext.logCurrentState();
+        try {
+            // Capturar screenshot en failures
+            if (scenario.isFailed()) {
+                logger.warn("❌ Escenario FALLÓ - Capturando estado del sistema...");
+                testContext.logCurrentState();
 
-            // ✅ VERIFICAR CONEXIÓN SI FALLÓ
-            System.out.println("🔌 Verificando estado de conexión después del fallo...");
-            boolean isConnected = testContext.getConnectionService().verifyAndReconnect();
-            System.out.println("📊 Conexión después del fallo: " + (isConnected ? "✅ CONECTADO" : "❌ DESCONECTADO"));
+                Exception error = new RuntimeException("Scenario failed: " + scenario.getName());
+                ScreenshotHelper.captureFailureState(testContext, error);
+
+                boolean isConnected = testContext.getConnectionService().verifyAndReconnect();
+                logger.info("🔌 Conexión después del fallo: {}", (isConnected ? "✅ CONECTADO" : "❌ DESCONECTADO"));
+            }
+
+            // Registrar en dashboard de cobertura
+            if (testContext.getCurrentResponse() != null) {
+                TestCoverageReporter.recordTransaction(
+                        testContext.getCurrentResponse(),
+                        getFeatureName(scenario),
+                        testContext.getCurrentRequest() != null ?
+                                testContext.getCurrentRequest().getTransactionType().toString() : "UNKNOWN"
+                );
+            }
+
+            Allure.addAttachment("Scenario Status", status);
+
+        } catch (Exception e) {
+            logger.error("❌ Error en afterScenario: {}", e.getMessage(), e);
         }
 
-        System.out.println("───────────────────────────────────────────────────────────────\n");
+        logger.info("─".repeat(60) + "\n");
     }
 
-//    @After(order = 1)
-//    public void afterScenario(Scenario scenario) {
-//        // Log del resultado
-//        String status = scenario.getStatus().toString();
-//        String emoji = scenario.isFailed() ? "❌" : "✅";
-//
-//        System.out.println("───────────────────────────────────────────────────────────────");
-//        System.out.println(emoji + " RESULTADO: " + status + " - " + scenario.getName());
-//
-//        // Si falló, log del estado actual para debugging
-//        if (scenario.isFailed()) {
-//            System.err.println("❌ ESCENARIO FALLÓ - Logging estado del contexto:");
-//            testContext.logCurrentState();
-//        }
-//
-//        System.out.println("───────────────────────────────────────────────────────────────\n");
-//    }
-
-    /**
-     * Se ejecuta DESPUÉS de cada escenario con tag @DisconnectAfter
-     */
-//    @After(value = "@DisconnectAfter", order = 2)
-//    public void disconnectAfterTaggedScenarios(Scenario scenario) {
-//        System.out.println("🔌 Escenario marcado para desconexión automática");
-//
-//        if (testContext.isConnected()) {
-//            testContext.disconnect();
-//            System.out.println("✅ Desconectado después de: " + scenario.getName());
-//        }
-//    }
-
-    /**
-     * Se ejecuta UNA VEZ después de todos los escenarios
-     */
-//    @AfterAll
-//    public static void afterAll() {
-//        System.out.println("═══════════════════════════════════════════════════════════════");
-//        System.out.println("🏁 SUITE DE PRUEBAS COMPLETADA");
-//        System.out.println("═══════════════════════════════════════════════════════════════");
-//    }
-
-    /**
-     * Se ejecuta en caso de fallo - Captura screenshots o logs adicionales
-     */
     @After(order = 0)
     public void captureFailureDetails(Scenario scenario) {
         if (scenario.isFailed()) {
-            // Capturar estado de la última respuesta si existe
             if (testContext.getLastResponse() != null) {
                 String responseBody = testContext.getLastResponse().getBody().asString();
                 int statusCode = testContext.getLastResponse().getStatusCode();
 
-                System.err.println("📊 Última respuesta antes del fallo:");
-                System.err.println("   Status Code: " + statusCode);
-                System.err.println("   Response Body: " + responseBody);
+                logger.error("📊 Última respuesta antes del fallo:");
+                logger.error("   Status Code: {}", statusCode);
+                logger.error("   Response Body: {}", responseBody);
 
-                // Adjuntar al reporte de Cucumber
                 scenario.attach(responseBody, "application/json", "Last Response");
             }
 
-            // Capturar estado de conexión
             boolean isConnected = testContext.isConnected();
             String connectionStatus = isConnected ? "CONECTADO" : "DESCONECTADO";
 
-            System.err.println("🔌 Estado de conexión al fallar: " + connectionStatus);
+            logger.error("🔌 Estado de conexión al fallar: {}", connectionStatus);
             scenario.attach(connectionStatus, "text/plain", "Connection Status");
         }
+    }
+
+    @AfterAll
+    public static void afterAll() {
+        logger.info("═".repeat(60));
+        logger.info("🏁 FINALIZANDO SUITE DE TESTS ISO8583");
+        logger.info("═".repeat(60));
+
+        if (!dashboardGenerated) {
+            try {
+                logger.info("📊 Generando Dashboard de Cobertura...");
+                TestCoverageReporter.generateDashboard();
+                dashboardGenerated = true;
+                logger.info("✅ Dashboard generado exitosamente");
+            } catch (Exception e) {
+                logger.error("❌ Error generando dashboard: {}", e.getMessage(), e);
+            }
+        }
+
+        logger.info("═".repeat(60));
+        logger.info("✅ Suite de tests completada");
+        logger.info("═".repeat(60));
+    }
+
+    private String getFeatureName(Scenario scenario) {
+        String uri = scenario.getUri().toString();
+        String[] parts = uri.split("/");
+        String featureFile = parts[parts.length - 1];
+        return featureFile.replace(".feature", "").replace("_", " ").toUpperCase();
     }
 }

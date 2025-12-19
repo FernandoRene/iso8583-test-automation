@@ -185,6 +185,14 @@ public class TransactionService {
                 logger.debug("→ POST /api/v1/transactions/authorization");
                 return apiClient.sendAuthorization(requestBody);
 
+            case DEPOSIT:
+                logger.debug("→ POST /api/v1/transactions/deposit");
+                return apiClient.sendDeposit(requestBody);
+
+            case CASHBACK:
+                logger.debug("→ POST /api/v1/transactions/cashback");
+                return apiClient.sendCashback(requestBody);
+
             default:
                 throw new IllegalArgumentException("Tipo de transacción no soportado: " + request.getTransactionType());
         }

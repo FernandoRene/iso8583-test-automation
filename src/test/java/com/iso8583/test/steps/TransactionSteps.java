@@ -102,6 +102,7 @@ public class TransactionSteps {
     @Y("la cuenta a consultar es {string}")
     @Y("con cuenta {string}")
     @Y("con cuenta origen {string}")
+    @Y("la cuenta destino es {string}")     // Agregado
     @Step("Configurar cuenta: {account}")
     public void configurarCuenta(String account) {
         logger.info("💰 Configurando cuenta: {}", account);
@@ -516,5 +517,91 @@ public class TransactionSteps {
                 .map(String::trim)
                 .filter(code -> !code.isEmpty())
                 .collect(java.util.stream.Collectors.toList());
+    }
+
+    // ============================================================================
+// GIVEN STEPS - DEPOSIT Y CASHBACK ESPECÍFICOS
+// ============================================================================
+
+
+    /**
+     * Configura el processing code (campo 3)
+     */
+    @Y("el processing code es {string}")
+    @Step("Configurar processing code: {processingCode}")
+    public void establecerProcessingCode(String processingCode) {
+        logger.info("🔧 Configurando processing code: {}", processingCode);
+        context.getRequestBuilder().processingCode(processingCode);
+        Allure.addAttachment("Processing Code", processingCode);
+    }
+
+    /**
+     * Configura el monto de cashback para transacciones de cashback
+     */
+    @Y("el monto de cashback es {string}")
+    @Y("con monto de cashback {string}")
+    @Step("Configurar monto de cashback: {cashbackAmount}")
+    public void configurarMontoCashback(String cashbackAmount) {
+        logger.info("💰 Configurando monto de cashback: {}", cashbackAmount);
+        context.getRequestBuilder().cashbackAmount(cashbackAmount);
+        Allure.addAttachment("Cashback Amount", cashbackAmount);
+    }
+
+    /**
+     * Configura el MTI para transacciones de cashback (0100 o 0200)
+     */
+    @Y("el MTI es {string}")
+    @Y("con MTI {string}")
+    @Step("Configurar MTI: {mti}")
+    public void configurarMTI(String mti) {
+        logger.info("📋 Configurando MTI: {}", mti);
+        context.getRequestBuilder().mti(mti);
+        Allure.addAttachment("MTI", mti);
+    }
+
+// ============================================================================
+// WHEN STEPS - ENVÍO SIN CAMPOS OPCIONALES/REQUERIDOS
+// ============================================================================
+
+    /**
+     * Envía transacción sin Track2 (para validar que es opcional en deposit)
+     */
+    @Cuando("envío la transacción sin Track2")
+    @Step("Enviar transacción sin Track2")
+    public void enviarTransaccionSinTrack2() {
+        logger.info("📤 Enviando transacción sin Track2");
+
+        // Remover Track2 del request builder
+        context.getRequestBuilder().track2(null);
+
+        enviarTransaccion();
+    }
+
+    /**
+     * Envía transacción sin cuenta destino (para validar error en deposit)
+     */
+    @Cuando("envío la transacción sin cuenta destino")
+    @Step("Enviar transacción sin cuenta destino")
+    public void enviarTransaccionSinCuentaDestino() {
+        logger.info("📤 Enviando transacción sin cuenta destino");
+
+        // Remover cuenta del request builder
+        context.getRequestBuilder().account(null);
+
+        enviarTransaccion();
+    }
+
+    /**
+     * Envía transacción sin cashback amount (para validar error en cashback)
+     */
+    @Cuando("envío la transacción sin cashback amount")
+    @Step("Enviar transacción sin cashback amount")
+    public void enviarTransaccionSinCashbackAmount() {
+        logger.info("📤 Enviando transacción sin cashback amount");
+
+        // Remover cashbackAmount del request builder
+        context.getRequestBuilder().cashbackAmount(null);
+
+        enviarTransaccion();
     }
 }

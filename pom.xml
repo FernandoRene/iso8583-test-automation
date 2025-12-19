@@ -32,9 +32,14 @@
         <jackson.version>2.16.0</jackson.version>
         <gson.version>2.10.1</gson.version>
 
+        <!-- ✅ NUEVAS DEPENDENCIAS PARA REPORTES AVANZADOS -->
+        <aspectj.version>1.9.20.1</aspectj.version>
+
         <!-- Configuración de Maven Surefire -->
         <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
+        <maven-site-plugin.version>3.12.1</maven-site-plugin.version>
+        <maven-surefire-report-plugin.version>3.2.3</maven-surefire-report-plugin.version>
     </properties>
 
     <dependencies>
@@ -121,6 +126,13 @@
             <version>${allure.version}</version>
         </dependency>
 
+        <!-- ✅ NUEVA: Allure Attachments Helper -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-java-commons</artifactId>
+            <version>${allure.version}</version>
+        </dependency>
+
         <!-- ============================================================ -->
         <!-- ASSERTIONS - AssertJ -->
         <!-- ============================================================ -->
@@ -166,6 +178,13 @@
             <artifactId>gson</artifactId>
             <version>${gson.version}</version>
         </dependency>
+
+        <!-- ✅ NUEVO: Para Screenshots -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.15.1</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -186,6 +205,7 @@
 
             <!-- ============================================================ -->
             <!-- MAVEN SUREFIRE PLUGIN - Para ejecutar tests -->
+            <!-- ✅ MEJORADO con configuración AspectJ para Allure -->
             <!-- ============================================================ -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -198,17 +218,25 @@
                     </includes>
                     <systemPropertyVariables>
                         <cucumber.publish.quiet>true</cucumber.publish.quiet>
+                        <!-- ✅ Habilitar screenshots automáticos -->
+                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
                     </systemPropertyVariables>
                     <properties>
                         <configurationParameters>
                             cucumber.junit-platform.naming-strategy=long
                         </configurationParameters>
                     </properties>
+                    <!-- ✅ Configuración de memoria para tests grandes -->
+                    <argLine>
+                        -Xmx1024m
+                        -Dfile.encoding=UTF-8
+                    </argLine>
                 </configuration>
             </plugin>
 
             <!-- ============================================================ -->
             <!-- ALLURE MAVEN PLUGIN -->
+            <!-- ✅ MEJORADO con configuración avanzada -->
             <!-- ============================================================ -->
             <plugin>
                 <groupId>io.qameta.allure</groupId>
@@ -217,10 +245,57 @@
                 <configuration>
                     <reportVersion>${allure.version}</reportVersion>
                     <resultsDirectory>${project.build.directory}/allure-results</resultsDirectory>
+                    <reportDirectory>${project.build.directory}/allure-report</reportDirectory>
+                    <!-- ✅ Configuración para reporte standalone -->
+                    <allureDownloadUrl>https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/${allure.version}/allure-commandline-${allure.version}.zip</allureDownloadUrl>
                 </configuration>
+            </plugin>
+
+            <!-- ============================================================ -->
+            <!-- ✅ NUEVO: MAVEN SITE PLUGIN - Para generar sitio con reportes -->
+            <!-- ============================================================ -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-site-plugin</artifactId>
+                <version>${maven-site-plugin.version}</version>
+            </plugin>
+
+            <!-- ============================================================ -->
+            <!-- ✅ NUEVO: MAVEN SUREFIRE REPORT PLUGIN - Reportes HTML -->
+            <!-- ============================================================ -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-report-plugin</artifactId>
+                <version>${maven-surefire-report-plugin.version}</version>
+                <configuration>
+                    <outputDirectory>${project.build.directory}/surefire-reports</outputDirectory>
+                    <showSuccess>true</showSuccess>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>generate-test-report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report-only</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
+
+    <!-- ============================================================ -->
+    <!-- ✅ NUEVO: REPORTING SECTION - Para Maven Site -->
+    <!-- ============================================================ -->
+    <reporting>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-report-plugin</artifactId>
+                <version>${maven-surefire-report-plugin.version}</version>
+            </plugin>
+        </plugins>
+    </reporting>
 
     <!-- ============================================================ -->
     <!-- PROFILES PARA DIFERENTES EJECUCIONES -->
@@ -275,6 +350,28 @@
                                 <include>**/AllTestsRunner.java</include>
                             </includes>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- ✅ NUEVO: Profile para generar reportes completos -->
+        <profile>
+            <id>reporting</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-site-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>generate-site</id>
+                                <phase>post-integration-test</phase>
+                                <goals>
+                                    <goal>site</goal>
+                                </goals>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

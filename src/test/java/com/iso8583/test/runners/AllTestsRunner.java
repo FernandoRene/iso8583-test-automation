@@ -14,7 +14,6 @@ import static io.cucumber.junit.platform.engine.Constants.*;
  * - purchase.feature
  * - transfer.feature
  * - authorization.feature
- * - connection.feature
  */
 @Suite
 @IncludeEngines("cucumber")

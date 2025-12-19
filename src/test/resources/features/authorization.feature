@@ -7,7 +7,7 @@ Característica: Autorización (Authorization Request - MTI 0100)
 
   Antecedentes:
     Dado que el simulador ISO8583 está disponible en "http://localhost:8081"
-    Y el servicio está en modo "REAL" conectado al autorizador
+    Y el servicio está en modo "MOCK" conectado al autorizador
     Y la conexión con el autorizador está establecida
 
   @HappyPath @Smoke

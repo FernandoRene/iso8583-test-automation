@@ -9,7 +9,9 @@ public enum TransactionType {
     CASH_ADVANCE("CASH_ADVANCE", "Avance de Efectivo"),
     PURCHASE("PURCHASE", "Compra"),
     TRANSFER("TRANSFER", "Transferencia"),
-    AUTHORIZATION("AUTHORIZATION", "Autorización");
+    AUTHORIZATION("AUTHORIZATION", "Autorización"),
+    DEPOSIT("DEPOSIT", "Deposito de Efectivo"),
+    CASHBACK("CASHBACK", "Cashback");
 
     private final String code;
     private final String description;

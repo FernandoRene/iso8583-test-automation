@@ -1,0 +1,57 @@
+[
+  {
+    "name": "Errores de Validación",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*validación.*|.*validation.*"
+  },
+  {
+    "name": "Timeouts de Conexión",
+    "matchedStatuses": ["failed", "broken"],
+    "messageRegex": ".*timeout.*|.*connection.*timed out.*"
+  },
+  {
+    "name": "Errores HTTP 4xx",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*HTTP.*4\\d{2}.*"
+  },
+  {
+    "name": "Errores HTTP 5xx",
+    "matchedStatuses": ["failed", "broken"],
+    "messageRegex": ".*HTTP.*5\\d{2}.*"
+  },
+  {
+    "name": "Transacciones Rechazadas",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*responseCode.*(?!00).*|.*Rechazada.*|.*Declined.*"
+  },
+  {
+    "name": "Errores de Autenticación",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*(?i)(unauthorized|forbidden|authentication).*"
+  },
+  {
+    "name": "Errores de Datos Inválidos",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*(?i)(invalid|PAN|Track2|campo obligatorio).*"
+  },
+  {
+    "name": "Errores de Conexión con Autorizador",
+    "matchedStatuses": ["broken"],
+    "messageRegex": ".*(?i)(connection refused|no route to host|autorizador).*"
+  },
+  {
+    "name": "Fondos Insuficientes",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*(?i)(insufficient funds|fondos insuficientes|código 51).*"
+  },
+  {
+    "name": "Tests Ignorados",
+    "matchedStatuses": ["skipped"],
+    "messageRegex": ".*"
+  },
+  {
+    "name": "Otros Errores",
+    "matchedStatuses": ["failed", "broken"],
+    "messageRegex": ".*"
+  }
+]

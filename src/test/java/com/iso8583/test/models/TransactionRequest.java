@@ -28,6 +28,8 @@ public class TransactionRequest {
     private String posEntryMode;
     private String pinData;
     private String privateUseFields;
+    private String cashbackAmount;  // Campo 54 - Monto de cashback
+    private String mti;              // MTI específico (0100 o 0200 para cashback)
 
     // Constructores
     public TransactionRequest() {
@@ -53,6 +55,8 @@ public class TransactionRequest {
         this.posEntryMode = builder.posEntryMode;
         this.pinData = builder.pinData;
         this.privateUseFields = builder.privateUseFields;
+        this.cashbackAmount = builder.cashbackAmount;
+        this.mti = builder.mti;
     }
 
     // ============================================================================
@@ -211,6 +215,22 @@ public class TransactionRequest {
         this.privateUseFields = privateUseFields;
     }
 
+    public String getCashbackAmount() {
+        return cashbackAmount;
+    }
+
+    public void setCashbackAmount(String cashbackAmount) {
+        this.cashbackAmount = cashbackAmount;
+    }
+
+    public String getMti() {
+        return mti;
+    }
+
+    public void setMti(String mti) {
+        this.mti = mti;
+    }
+
     // ============================================================================
     // MÉTODOS AUXILIARES
     // ============================================================================
@@ -294,6 +314,8 @@ public class TransactionRequest {
         private String posEntryMode;
         private String pinData;
         private String privateUseFields;
+        private String cashbackAmount;
+        private String mti;
 
         private Builder() {
         }
@@ -390,6 +412,17 @@ public class TransactionRequest {
 
         public Builder privateUseFields(String privateUseFields) {
             this.privateUseFields = privateUseFields;
+            return this;
+        }
+
+        // NUEVOS MÉTODOS
+        public Builder cashbackAmount(String cashbackAmount) {
+            this.cashbackAmount = cashbackAmount;
+            return this;
+        }
+
+        public Builder mti(String mti) {
+            this.mti = mti;
             return this;
         }
 

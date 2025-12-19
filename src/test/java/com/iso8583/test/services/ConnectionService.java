@@ -62,7 +62,12 @@ public class ConnectionService {
                 String simulatorType = (String) responseBody.get("simulatorType");
 
                 connected = true;
-                this.simulatorMode = mode; // Actualizar modo desde respuesta
+
+                if (mode != null && !mode.isEmpty()) {
+                    this.simulatorMode = mode;
+                } else {
+                    logger.warn("⚠️ Modo recibido es null, manteniendo: {}", this.simulatorMode);
+                }
 
                 logger.info("✅ Conectado exitosamente al simulador");
                 logger.info("   Modo: {}", mode);
@@ -147,13 +152,19 @@ public class ConnectionService {
     }
 
     /**
-     * ✅ FIX CRÍTICO: Previene cambios de modo innecesarios
+     * FIX CRÍTICO: Previene cambios de modo innecesarios
      * Configura el modo del simulador y asegura la conexión
      */
     public void setSimulatorMode(String mode) {
         String targetMode = mode.toUpperCase();
 
-        // ✅ FIX 1: Verificar si ya estamos en ese modo
+        // ✅ FIX: Inicializar simulatorMode si es null
+        if (this.simulatorMode == null) {
+            this.simulatorMode = "REAL"; // Default
+            logger.warn("⚠️ simulatorMode era null, inicializado a REAL");
+        }
+
+        // ✅ FIX: Verificar si ya estamos en ese modo
         if (this.simulatorMode.equalsIgnoreCase(targetMode)) {
             logger.info("✅ Ya estamos en modo {}, omitiendo cambio", targetMode);
             return;
@@ -177,7 +188,7 @@ public class ConnectionService {
                 this.simulatorMode = targetMode;
                 logger.info("✅ Modo cambiado exitosamente a: {}", targetMode);
 
-                // ✅ FIX 2: Esperar que el cambio de modo se complete
+                // ✅ FIX: Esperar que el cambio de modo se complete
                 Thread.sleep(1000); // Dar tiempo al simulador para reconectar
 
             } else {
